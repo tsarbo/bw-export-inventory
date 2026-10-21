@@ -42,7 +42,7 @@ skipped product types with counts (e.g. `grouped: 12, external: 3`), unreadable 
 
 ## CSV contents
 
-Columns: `id ; parent_id ; type ; name ; sku ; manage_stock ; stock_quantity`
+Columns: `id ; parent_id ; type ; name ; sku ; price ; manage_stock ; stock_quantity`
 
 - Only stock status `instock` is exported (`onbackorder` and `outofstock` are not).
 - **Simple** product in stock → one row. `manage_stock` is `yes`/`no`; quantity blank when `no`.
@@ -57,6 +57,11 @@ Columns: `id ; parent_id ; type ; name ; sku ; manage_stock ; stock_quantity`
   their raw value, "Any…" attributes are omitted.
 - **SKU**: the product's/variation's own SKU (`edit` context); a variation without a SKU stays blank instead
   of inheriting the parent's.
+- **Price**: the current selling price (`get_price()`): the sale price while a sale is active, otherwise the
+  regular price; a scheduled sale that has not started does not count. Blank when no price is set (common on
+  unpublished items). Parent rows of variable products always have a blank price. Formatted with the shop's
+  decimal separator and number of decimals (WooCommerce → Settings → General), no thousands separator,
+  e.g. `12,50`, so it is read as a number by Excel in the shop's locale.
 - **Total row** (last line): `name = TOTAL (stock-managed rows)`, `stock_quantity` = sum of the column.
   Parent-managed stock appears only on the parent row, so nothing is double-counted. Its presence also
   marks the file as complete.
@@ -85,5 +90,5 @@ the summary, continue.
 - `InventoryRows` is unit-tested with PHPUnit using plain `ProductSnapshot` values — no mocks:
   simple yes/no stock management, variation own/none/parent stock, parent row placement and single counting,
   disabled and out-of-stock/backorder variations excluded, naming with taxonomy/custom/"Any" attributes,
-  own-SKU behavior, total row.
+  price formatting and blank prices, total row.
 - `ProductReader` and the CLI command are verified manually with `wp inventory-export` on a staging shop.

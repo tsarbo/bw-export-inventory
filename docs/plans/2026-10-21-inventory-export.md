@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** A WordPress plugin exposing `wp inventory-export`, which writes in-stock WooCommerce simple products and variations to a CSV file with a stock total on the last line.
+**Goal:** A WordPress plugin exposing `wp inventory-export`, which writes in-stock WooCommerce simple products and variations (with their current price) to a CSV file with a stock total on the last line.
 
 **Architecture:** `ProductReader` turns a `WC_Product` into a plain `ProductSnapshot` value object. `InventoryRows` (pure PHP, no WordPress calls) holds every export rule and turns snapshots into CSV rows while keeping the stock total. `ExportInventoryCommand` validates flags, pages through product IDs, streams rows to disk and prints a summary. Design: `docs/plans/2026-10-21-inventory-export-design.md`.
 
@@ -114,7 +114,7 @@ git commit -m "Add Composer and PHPUnit dev tooling"
 
 ---
 
-### Task 2: Snapshot value object + simple product rows
+### Task 2: Snapshot value object + simple product rows + price formatting
 
 **Files:**
 - Create: `includes/ProductSnapshot.php`
@@ -140,6 +140,7 @@ final class ProductSnapshot
     public const PARENT_MANAGED = 'parent';
 
     /**
+     * @param string                $price           Current selling price as stored by WooCommerce ('12.5'); '' when not set.
      * @param list<string>          $attributeLabels Display values of a variation's attributes; '' for "Any…".
      * @param list<ProductSnapshot> $variations      All variations of a variable product.
      */
@@ -148,6 +149,7 @@ final class ProductSnapshot
         public readonly string $type,
         public readonly string $name,
         public readonly string $sku,
+        public readonly string $price,
         public readonly string $stockStatus,
         public readonly string $manageStock,
         public readonly ?int $stockQuantity,
@@ -161,11 +163,14 @@ final class ProductSnapshot
 
 **Step 2: Write the failing tests** in `tests/Unit/InventoryRowsTest.php`
 
+Tests build `InventoryRows` through the `rows()` helper, which uses `,` as decimal separator and 2 decimals
+(a typical Greek shop), so expected prices look like `'12,50'`.
+
 ```php
 <?php
 
 // ABOUTME: Tests for InventoryRows, the export rules that turn product snapshots into CSV rows.
-// ABOUTME: Covers stock status filtering, variations, parent-managed stock, naming and the stock total.
+// ABOUTME: Covers stock status filtering, variations, parent-managed stock, naming, prices and the stock total.
 
 declare(strict_types=1);
 
@@ -179,23 +184,23 @@ final class InventoryRowsTest extends TestCase
 {
     public function test_simple_product_with_managed_stock_exports_its_quantity(): void
     {
-        $rows = (new InventoryRows())->forProduct(self::simple(quantity: 5));
+        $rows = self::rows()->forProduct(self::simple(quantity: 5));
 
-        self::assertSame([[10, '', 'simple', 'Mug', 'MUG-1', 'yes', 5]], $rows);
+        self::assertSame([[10, '', 'simple', 'Mug', 'MUG-1', '12,50', 'yes', 5]], $rows);
     }
 
     public function test_simple_product_without_managed_stock_leaves_quantity_blank(): void
     {
-        $rows = (new InventoryRows())->forProduct(
+        $rows = self::rows()->forProduct(
             self::simple(manageStock: ProductSnapshot::UNMANAGED, quantity: 7),
         );
 
-        self::assertSame([[10, '', 'simple', 'Mug', 'MUG-1', 'no', '']], $rows);
+        self::assertSame([[10, '', 'simple', 'Mug', 'MUG-1', '12,50', 'no', '']], $rows);
     }
 
     public function test_simple_product_not_in_stock_is_skipped(): void
     {
-        $rows = new InventoryRows();
+        $rows = self::rows();
 
         self::assertSame([], $rows->forProduct(self::simple(stockStatus: 'outofstock')));
         self::assertSame([], $rows->forProduct(self::simple(stockStatus: 'onbackorder')));
@@ -208,24 +213,46 @@ final class InventoryRowsTest extends TestCase
             type: 'grouped',
             name: 'Set',
             sku: 'SET',
+            price: '30',
             stockStatus: 'instock',
             manageStock: ProductSnapshot::MANAGED,
             stockQuantity: 4,
         );
 
-        self::assertSame([], (new InventoryRows())->forProduct($grouped));
+        self::assertSame([], self::rows()->forProduct($grouped));
+    }
+
+    public function test_price_uses_the_given_decimal_separator_and_decimals(): void
+    {
+        $rows = (new InventoryRows('.', 3))->forProduct(self::simple(price: '1234.5'));
+
+        self::assertSame('1234.500', $rows[0][5]);
+    }
+
+    public function test_missing_price_stays_blank(): void
+    {
+        $rows = self::rows()->forProduct(self::simple(price: ''));
+
+        self::assertSame('', $rows[0][5]);
+    }
+
+    private static function rows(): InventoryRows
+    {
+        return new InventoryRows(',', 2);
     }
 
     private static function simple(
         string $stockStatus = 'instock',
         string $manageStock = ProductSnapshot::MANAGED,
         ?int $quantity = 5,
+        string $price = '12.5',
     ): ProductSnapshot {
         return new ProductSnapshot(
             id: 10,
             type: 'simple',
             name: 'Mug',
             sku: 'MUG-1',
+            price: $price,
             stockStatus: $stockStatus,
             manageStock: $manageStock,
             stockQuantity: $quantity,
@@ -237,7 +264,7 @@ final class InventoryRowsTest extends TestCase
 **Step 3: Run the tests to verify they fail**
 
 Run: `vendor/bin/phpunit`
-Expected: 4 errors, `Class "BeyondWeb\ExportInventory\InventoryRows" not found`.
+Expected: 6 errors, `Class "BeyondWeb\ExportInventory\InventoryRows" not found`.
 
 **Step 4: Write the minimal implementation** in `includes/InventoryRows.php`
 
@@ -245,7 +272,7 @@ Expected: 4 errors, `Class "BeyondWeb\ExportInventory\InventoryRows" not found`.
 <?php
 
 // ABOUTME: Turns product snapshots into the CSV rows of the inventory export and keeps the stock total.
-// ABOUTME: Pure PHP: holds the rules for stock status, variations, parent-managed stock and naming.
+// ABOUTME: Pure PHP: holds the rules for stock status, variations, parent-managed stock, naming and prices.
 
 declare(strict_types=1);
 
@@ -253,9 +280,19 @@ namespace BeyondWeb\ExportInventory;
 
 final class InventoryRows
 {
-    public const HEADER = ['id', 'parent_id', 'type', 'name', 'sku', 'manage_stock', 'stock_quantity'];
+    public const HEADER = ['id', 'parent_id', 'type', 'name', 'sku', 'price', 'manage_stock', 'stock_quantity'];
 
     private const IN_STOCK = 'instock';
+
+    /**
+     * @param string $decimalSeparator Shop's price decimal separator, so Excel in the shop's locale reads prices as numbers.
+     * @param int    $decimals         Shop's number of price decimals.
+     */
+    public function __construct(
+        private readonly string $decimalSeparator,
+        private readonly int $decimals,
+    ) {
+    }
 
     /**
      * @return list<list<int|string>>
@@ -278,7 +315,16 @@ final class InventoryRows
         }
 
         return [
-            $this->row($product->id, '', 'simple', $product->name, $product->sku, $product->manageStock, $product->stockQuantity),
+            $this->row(
+                $product->id,
+                '',
+                'simple',
+                $product->name,
+                $product->sku,
+                $product->price,
+                $product->manageStock,
+                $product->stockQuantity,
+            ),
         ];
     }
 
@@ -293,12 +339,22 @@ final class InventoryRows
         string $type,
         string $name,
         string $sku,
+        string $price,
         string $manageStock,
         ?int $quantity,
     ): array {
         $exportedQuantity = $manageStock === ProductSnapshot::MANAGED ? $quantity : null;
 
-        return [$id, $parentId, $type, $name, $sku, $manageStock, $exportedQuantity ?? ''];
+        return [$id, $parentId, $type, $name, $sku, $this->formatPrice($price), $manageStock, $exportedQuantity ?? ''];
+    }
+
+    private function formatPrice(string $price): string
+    {
+        if ($price === '') {
+            return '';
+        }
+
+        return number_format((float) $price, $this->decimals, $this->decimalSeparator, '');
     }
 }
 ```
@@ -306,7 +362,7 @@ final class InventoryRows
 **Step 5: Run the tests to verify they pass**
 
 Run: `vendor/bin/phpunit`
-Expected: `OK (4 tests, 5 assertions)`
+Expected: `OK (6 tests, 7 assertions)`
 
 **Step 6: Commit**
 
@@ -323,7 +379,7 @@ git commit -m "Export rows for in-stock simple products"
 - Modify: `includes/InventoryRows.php`
 - Test: `tests/Unit/InventoryRowsTest.php`
 
-**Step 1: Add the failing tests** to `InventoryRowsTest` (above the `simple()` helper), and add the two helpers below `simple()`.
+**Step 1: Add the failing tests** to `InventoryRowsTest` (above the `rows()` helper), and add the two helpers below `simple()`.
 
 ```php
     public function test_variable_product_exports_only_enabled_in_stock_variations(): void
@@ -335,16 +391,16 @@ git commit -m "Export rows for in-stock simple products"
             self::variation(24, enabled: false),
         ]);
 
-        $rows = (new InventoryRows())->forProduct($product);
+        $rows = self::rows()->forProduct($product);
 
-        self::assertSame([[21, 20, 'variation', 'T-Shirt - Yellow - XL', 'TS-21', 'yes', 3]], $rows);
+        self::assertSame([[21, 20, 'variation', 'T-Shirt - Yellow - XL', 'TS-21', '9,90', 'yes', 3]], $rows);
     }
 
     public function test_variation_name_omits_any_attributes(): void
     {
         $product = self::variable([self::variation(21, labels: ['', 'XL'])]);
 
-        $rows = (new InventoryRows())->forProduct($product);
+        $rows = self::rows()->forProduct($product);
 
         self::assertSame('T-Shirt - XL', $rows[0][3]);
     }
@@ -353,9 +409,9 @@ git commit -m "Export rows for in-stock simple products"
     {
         $product = self::variable([self::variation(21, manageStock: ProductSnapshot::UNMANAGED, quantity: 9)]);
 
-        $rows = (new InventoryRows())->forProduct($product);
+        $rows = self::rows()->forProduct($product);
 
-        self::assertSame([[21, 20, 'variation', 'T-Shirt - Yellow - XL', 'TS-21', 'no', '']], $rows);
+        self::assertSame([[21, 20, 'variation', 'T-Shirt - Yellow - XL', 'TS-21', '9,90', 'no', '']], $rows);
     }
 
     public function test_variable_product_without_qualifying_variations_writes_nothing(): void
@@ -365,11 +421,11 @@ git commit -m "Export rows for in-stock simple products"
             self::variation(22, enabled: false),
         ]);
 
-        self::assertSame([], (new InventoryRows())->forProduct($product));
+        self::assertSame([], self::rows()->forProduct($product));
     }
 ```
 
-Helpers (below `simple()`):
+Helpers (below `simple()`). The variable product's own price (`'15'`) must never appear in the output:
 
 ```php
     /**
@@ -385,6 +441,7 @@ Helpers (below `simple()`):
             type: 'variable',
             name: 'T-Shirt',
             sku: 'TS',
+            price: '15',
             stockStatus: 'instock',
             manageStock: $manageStock,
             stockQuantity: $quantity,
@@ -408,6 +465,7 @@ Helpers (below `simple()`):
             type: 'variation',
             name: 'T-Shirt',
             sku: "TS-{$id}",
+            price: '9.9',
             stockStatus: $stockStatus,
             manageStock: $manageStock,
             stockQuantity: $quantity,
@@ -451,6 +509,7 @@ Add below `simpleRows()`:
                 'variation',
                 $this->variationName($product->name, $variation->attributeLabels),
                 $variation->sku,
+                $variation->price,
                 $variation->manageStock,
                 $variation->stockQuantity,
             );
@@ -485,7 +544,7 @@ Add below `simpleRows()`:
 **Step 4: Run the tests to verify they pass**
 
 Run: `vendor/bin/phpunit`
-Expected: `OK (8 tests, …)`
+Expected: `OK (10 tests, …)`
 
 **Step 5: Commit**
 
@@ -502,7 +561,7 @@ git commit -m "Export rows for enabled in-stock variations"
 - Modify: `includes/InventoryRows.php`
 - Test: `tests/Unit/InventoryRowsTest.php`
 
-**Step 1: Add the failing tests**
+**Step 1: Add the failing tests** (above the `rows()` helper)
 
 ```php
     public function test_parent_managed_variations_get_one_parent_row_above_them(): void
@@ -517,13 +576,13 @@ git commit -m "Export rows for enabled in-stock variations"
             quantity: 50,
         );
 
-        $rows = (new InventoryRows())->forProduct($product);
+        $rows = self::rows()->forProduct($product);
 
         self::assertSame([
-            [20, '', 'variable', 'T-Shirt', 'TS', 'yes', 50],
-            [21, 20, 'variation', 'T-Shirt - Yellow - XL', 'TS-21', 'parent', ''],
-            [22, 20, 'variation', 'T-Shirt - Yellow - XL', 'TS-22', 'parent', ''],
-            [23, 20, 'variation', 'T-Shirt - Yellow - XL', 'TS-23', 'yes', 4],
+            [20, '', 'variable', 'T-Shirt', 'TS', '', 'yes', 50],
+            [21, 20, 'variation', 'T-Shirt - Yellow - XL', 'TS-21', '9,90', 'parent', ''],
+            [22, 20, 'variation', 'T-Shirt - Yellow - XL', 'TS-22', '9,90', 'parent', ''],
+            [23, 20, 'variation', 'T-Shirt - Yellow - XL', 'TS-23', '9,90', 'yes', 4],
         ], $rows);
     }
 
@@ -538,9 +597,9 @@ git commit -m "Export rows for enabled in-stock variations"
             quantity: 50,
         );
 
-        $rows = (new InventoryRows())->forProduct($product);
+        $rows = self::rows()->forProduct($product);
 
-        self::assertSame([[22, 20, 'variation', 'T-Shirt - Yellow - XL', 'TS-22', 'yes', 4]], $rows);
+        self::assertSame([[22, 20, 'variation', 'T-Shirt - Yellow - XL', 'TS-22', '9,90', 'yes', 4]], $rows);
     }
 ```
 
@@ -556,6 +615,7 @@ the second new test already passes.
     /**
      * Variations that share their parent's stock get a blank quantity; the shared quantity is written
      * once, on a parent row placed directly above them, so the stock total never counts it twice.
+     * The parent row has no price: a variable product has no single price of its own.
      *
      * @return list<list<int|string>>
      */
@@ -571,6 +631,7 @@ the second new test already passes.
                 'variable',
                 $product->name,
                 $product->sku,
+                '',
                 $product->manageStock,
                 $product->stockQuantity,
             );
@@ -583,6 +644,7 @@ the second new test already passes.
                 'variation',
                 $this->variationName($product->name, $variation->attributeLabels),
                 $variation->sku,
+                $variation->price,
                 $variation->manageStock,
                 $variation->stockQuantity,
             );
@@ -613,7 +675,7 @@ Add below `exportedVariations()`:
 **Step 4: Run the tests to verify they pass**
 
 Run: `vendor/bin/phpunit`
-Expected: `OK (10 tests, …)`
+Expected: `OK (12 tests, …)`
 
 **Step 5: Commit**
 
@@ -630,20 +692,20 @@ git commit -m "Write one parent row for variations sharing parent stock"
 - Modify: `includes/InventoryRows.php`
 - Test: `tests/Unit/InventoryRowsTest.php`
 
-**Step 1: Add the failing tests**
+**Step 1: Add the failing tests** (above the `rows()` helper)
 
 ```php
     public function test_total_row_is_zero_before_any_product(): void
     {
-        $rows = new InventoryRows();
+        $rows = self::rows();
 
-        self::assertSame(['', '', '', 'TOTAL (stock-managed rows)', '', '', 0], $rows->totalRow());
+        self::assertSame(['', '', '', 'TOTAL (stock-managed rows)', '', '', '', 0], $rows->totalRow());
         self::assertSame(0, $rows->stockTotal());
     }
 
     public function test_total_sums_exported_quantities_and_counts_shared_stock_once(): void
     {
-        $rows = new InventoryRows();
+        $rows = self::rows();
         $rows->forProduct(self::simple(quantity: 5));
         $rows->forProduct(self::simple(manageStock: ProductSnapshot::UNMANAGED, quantity: 9));
         $rows->forProduct(self::simple(stockStatus: 'outofstock', quantity: 100));
@@ -658,7 +720,7 @@ git commit -m "Write one parent row for variations sharing parent stock"
         ));
 
         self::assertSame(59, $rows->stockTotal());
-        self::assertSame(['', '', '', 'TOTAL (stock-managed rows)', '', '', 59], $rows->totalRow());
+        self::assertSame(['', '', '', 'TOTAL (stock-managed rows)', '', '', '', 59], $rows->totalRow());
     }
 ```
 
@@ -691,7 +753,7 @@ Add the public methods below `forProduct()`:
      */
     public function totalRow(): array
     {
-        return ['', '', '', 'TOTAL (stock-managed rows)', '', '', $this->stockTotal];
+        return ['', '', '', 'TOTAL (stock-managed rows)', '', '', '', $this->stockTotal];
     }
 ```
 
@@ -701,13 +763,13 @@ In `row()`, add to the total before returning:
         $exportedQuantity = $manageStock === ProductSnapshot::MANAGED ? $quantity : null;
         $this->stockTotal += $exportedQuantity ?? 0;
 
-        return [$id, $parentId, $type, $name, $sku, $manageStock, $exportedQuantity ?? ''];
+        return [$id, $parentId, $type, $name, $sku, $this->formatPrice($price), $manageStock, $exportedQuantity ?? ''];
 ```
 
 **Step 4: Run the tests to verify they pass**
 
 Run: `vendor/bin/phpunit`
-Expected: `OK (12 tests, …)` and no other output.
+Expected: `OK (14 tests, …)` and no other output.
 
 **Step 5: Commit**
 
@@ -751,6 +813,7 @@ final class ProductReader
             type: $product->get_type(),
             name: $product->get_name(),
             sku: $product->get_sku('edit'),
+            price: (string) $product->get_price(),
             stockStatus: $product->get_stock_status(),
             manageStock: $product->get_manage_stock() ? ProductSnapshot::MANAGED : ProductSnapshot::UNMANAGED,
             stockQuantity: $product->get_stock_quantity(),
@@ -783,6 +846,7 @@ final class ProductReader
             type: 'variation',
             name: $variation->get_name(),
             sku: $variation->get_sku('edit'),
+            price: (string) $variation->get_price(),
             stockStatus: $variation->get_stock_status(),
             manageStock: $this->variationManageStock($variation),
             stockQuantity: $variation->get_stock_quantity('edit'),
@@ -831,7 +895,7 @@ Expected: `No syntax errors detected in includes/ProductReader.php`
 **Step 3: Unit tests still green**
 
 Run: `vendor/bin/phpunit`
-Expected: `OK (12 tests, …)`
+Expected: `OK (14 tests, …)`
 
 **Step 4: Commit**
 
@@ -928,7 +992,7 @@ final class ExportInventoryCommand
         fwrite($handle, self::UTF8_BOM);
         $this->writeRow($handle, InventoryRows::HEADER, $delimiter);
 
-        $rows = new InventoryRows();
+        $rows = new InventoryRows(wc_get_price_decimal_separator(), wc_get_price_decimals());
         $reader = new ProductReader();
         $written = 0;
         $skippedTypes = [];
@@ -1094,7 +1158,7 @@ Expected: `No syntax errors detected` for both.
 **Step 4: Unit tests still green**
 
 Run: `vendor/bin/phpunit`
-Expected: `OK (12 tests, …)`
+Expected: `OK (14 tests, …)`
 
 **Step 5: Commit**
 
@@ -1137,7 +1201,7 @@ The file is UTF-8 with a BOM so Excel shows non-Latin product names correctly.
 
 ## Output
 
-Columns: `id`, `parent_id`, `type`, `name`, `sku`, `manage_stock`, `stock_quantity`.
+Columns: `id`, `parent_id`, `type`, `name`, `sku`, `price`, `manage_stock`, `stock_quantity`.
 
 - Only items with stock status **In stock** are exported (not "On backorder").
 - **Simple products**: one row.
@@ -1146,6 +1210,9 @@ Columns: `id`, `parent_id`, `type`, `name`, `sku`, `manage_stock`, `stock_quanti
 - When variations use their parent's stock (`parent`), the parent product gets its own row with the shared quantity,
   directly above its variations — so the shared stock is counted once.
 - SKUs are the item's own; a variation without a SKU shows a blank, not its parent's SKU.
+- `price` is the current selling price: the sale price while a sale is active, otherwise the regular price.
+  It is blank when no price is set, and always blank on parent rows. It uses the shop's decimal separator and
+  number of decimals (WooCommerce → Settings → General), with no thousands separator.
 - Other product types (grouped, external, …) are skipped and counted in the command's summary.
 - The last row is `TOTAL (stock-managed rows)` with the sum of the `stock_quantity` column.
 
@@ -1188,6 +1255,9 @@ Install the plugin there (symlink or copy, without `vendor/`), activate it, then
      taxonomy attribute shows term name, not slug; "Any…" attribute omitted;
    - a variation without its own SKU shows a blank SKU;
    - a variable product whose variations use parent stock: parent row above, variations `parent` with blank quantity.
+   - price: a product on an active sale shows the sale price; one with a sale scheduled in the future shows the
+     regular price; a draft without a price shows a blank; parent rows have a blank price;
+     prices use the shop's decimal separator and Excel treats them as numbers (right-aligned, summable).
 8. Last row is `TOTAL (stock-managed rows)`; select the `stock_quantity` column above it in Excel — the Excel sum equals the total.
 9. `wp inventory-export --status=any` and `--status=publish,draft` include draft products; trash is never included with `any`.
 10. Summary lists skipped types if the shop has grouped/external products.
