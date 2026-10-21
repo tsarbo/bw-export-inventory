@@ -30,6 +30,7 @@ final class InventoryRows
     {
         return match ($product->type) {
             'simple' => $this->simpleRows($product),
+            'variable' => $this->variableRows($product),
             default => [],
         };
     }
@@ -55,6 +56,50 @@ final class InventoryRows
                 $product->stockQuantity,
             ),
         ];
+    }
+
+    /**
+     * @return list<list<int|string>>
+     */
+    private function variableRows(ProductSnapshot $product): array
+    {
+        $rows = [];
+        foreach ($this->exportedVariations($product) as $variation) {
+            $rows[] = $this->row(
+                $variation->id,
+                $product->id,
+                'variation',
+                $this->variationName($product->name, $variation->attributeLabels),
+                $variation->sku,
+                $variation->price,
+                $variation->manageStock,
+                $variation->stockQuantity,
+            );
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @return list<ProductSnapshot>
+     */
+    private function exportedVariations(ProductSnapshot $product): array
+    {
+        return array_values(array_filter(
+            $product->variations,
+            static fn (ProductSnapshot $variation): bool => $variation->enabled
+                && $variation->stockStatus === self::IN_STOCK,
+        ));
+    }
+
+    /**
+     * @param list<string> $attributeLabels
+     */
+    private function variationName(string $parentName, array $attributeLabels): string
+    {
+        $labels = array_filter($attributeLabels, static fn (string $label): bool => $label !== '');
+
+        return implode(' - ', [$parentName, ...$labels]);
     }
 
     /**
