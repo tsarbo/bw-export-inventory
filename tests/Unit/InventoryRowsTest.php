@@ -189,6 +189,17 @@ final class InventoryRowsTest extends TestCase
         self::assertSame(['', '', '', 'TOTAL (stock-managed rows)', '', '', '', 59], $rows->totalRow());
     }
 
+    public function test_managed_stock_without_quantity_exports_blank_and_adds_nothing(): void
+    {
+        $rows = self::rows();
+
+        self::assertSame(
+            [[10, '', 'simple', 'Mug', 'MUG-1', '12,50', 'yes', '']],
+            $rows->forProduct(self::simple(quantity: null)),
+        );
+        self::assertSame(0, $rows->stockTotal());
+    }
+
     private static function rows(): InventoryRows
     {
         return new InventoryRows(',', 2);

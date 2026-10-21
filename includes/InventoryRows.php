@@ -37,6 +37,9 @@ final class InventoryRows
         };
     }
 
+    /**
+     * Sum of the stock_quantity column over every row forProduct() has returned so far.
+     */
     public function stockTotal(): int
     {
         return $this->stockTotal;
