@@ -95,7 +95,7 @@ final class InventoryRowsTest extends TestCase
         self::assertSame([[21, 20, 'variation', 'T-Shirt - Yellow - XL', 'TS-21', '9,90', 'yes', 3]], $rows);
     }
 
-    public function test_variation_name_omits_any_attributes(): void
+    public function test_variation_name_omits_attributes_set_to_any(): void
     {
         $product = self::variable([self::variation(21, labels: ['', 'XL'])]);
 
@@ -181,7 +181,7 @@ final class InventoryRowsTest extends TestCase
         return new ProductSnapshot(
             id: $id,
             type: 'variation',
-            name: 'T-Shirt',
+            name: "T-Shirt - variation {$id}",
             sku: "TS-{$id}",
             price: '9.9',
             stockStatus: $stockStatus,
