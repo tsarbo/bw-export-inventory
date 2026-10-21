@@ -140,6 +140,14 @@ final class ExportInventoryCommand
         }
 
         $requested = array_map('trim', explode(',', $option));
+        $requested = array_values(array_filter($requested, static fn (string $status): bool => $status !== ''));
+        if ($requested === []) {
+            WP_CLI::error('--status needs at least one status.');
+        }
+        if (in_array('any', $requested, true)) {
+            WP_CLI::error('"any" cannot be combined with other statuses.');
+        }
+
         $unknown = array_diff($requested, $known);
         if ($unknown !== []) {
             WP_CLI::error(sprintf(
