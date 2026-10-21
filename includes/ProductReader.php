@@ -23,7 +23,7 @@ final class ProductReader
             price: (string) $product->get_price(),
             stockStatus: $product->get_stock_status(),
             manageStock: $product->get_manage_stock() ? ProductSnapshot::MANAGED : ProductSnapshot::UNMANAGED,
-            stockQuantity: $product->get_stock_quantity(),
+            stockQuantity: $product->get_stock_quantity('edit'),
             variations: $product->is_type('variable') ? $this->readVariations($product) : [],
         );
     }
