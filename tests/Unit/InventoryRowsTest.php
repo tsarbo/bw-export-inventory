@@ -123,6 +123,44 @@ final class InventoryRowsTest extends TestCase
         self::assertSame([], self::rows()->forProduct($product));
     }
 
+    public function test_parent_managed_variations_get_one_parent_row_above_them(): void
+    {
+        $product = self::variable(
+            [
+                self::variation(21, manageStock: ProductSnapshot::PARENT_MANAGED, quantity: 7),
+                self::variation(22, manageStock: ProductSnapshot::PARENT_MANAGED, quantity: 7),
+                self::variation(23, quantity: 4),
+            ],
+            manageStock: ProductSnapshot::MANAGED,
+            quantity: 50,
+        );
+
+        $rows = self::rows()->forProduct($product);
+
+        self::assertSame([
+            [20, '', 'variable', 'T-Shirt', 'TS', '', 'yes', 50],
+            [21, 20, 'variation', 'T-Shirt - Yellow - XL', 'TS-21', '9,90', 'parent', ''],
+            [22, 20, 'variation', 'T-Shirt - Yellow - XL', 'TS-22', '9,90', 'parent', ''],
+            [23, 20, 'variation', 'T-Shirt - Yellow - XL', 'TS-23', '9,90', 'yes', 4],
+        ], $rows);
+    }
+
+    public function test_parent_row_is_omitted_when_no_exported_variation_uses_parent_stock(): void
+    {
+        $product = self::variable(
+            [
+                self::variation(21, stockStatus: 'outofstock', manageStock: ProductSnapshot::PARENT_MANAGED),
+                self::variation(22, quantity: 4),
+            ],
+            manageStock: ProductSnapshot::MANAGED,
+            quantity: 50,
+        );
+
+        $rows = self::rows()->forProduct($product);
+
+        self::assertSame([[22, 20, 'variation', 'T-Shirt - Yellow - XL', 'TS-22', '9,90', 'yes', 4]], $rows);
+    }
+
     private static function rows(): InventoryRows
     {
         return new InventoryRows(',', 2);

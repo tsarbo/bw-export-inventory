@@ -46,34 +46,53 @@ final class InventoryRows
 
         return [
             $this->row(
-                $product->id,
-                '',
-                'simple',
-                $product->name,
-                $product->sku,
-                $product->price,
-                $product->manageStock,
-                $product->stockQuantity,
+                id: $product->id,
+                parentId: '',
+                type: 'simple',
+                name: $product->name,
+                sku: $product->sku,
+                price: $product->price,
+                manageStock: $product->manageStock,
+                quantity: $product->stockQuantity,
             ),
         ];
     }
 
     /**
+     * Variations that share their parent's stock get a blank quantity; the shared quantity is written
+     * once, on a parent row placed directly above them, so the stock total never counts it twice.
+     * The parent row has no price: a variable product has no single price of its own.
+     *
      * @return list<list<int|string>>
      */
     private function variableRows(ProductSnapshot $product): array
     {
+        $variations = $this->exportedVariations($product);
+
         $rows = [];
-        foreach ($this->exportedVariations($product) as $variation) {
+        if ($this->usesParentStock($variations)) {
             $rows[] = $this->row(
-                $variation->id,
-                $product->id,
-                'variation',
-                $this->variationName($product->name, $variation->attributeLabels),
-                $variation->sku,
-                $variation->price,
-                $variation->manageStock,
-                $variation->stockQuantity,
+                id: $product->id,
+                parentId: '',
+                type: 'variable',
+                name: $product->name,
+                sku: $product->sku,
+                price: '',
+                manageStock: $product->manageStock,
+                quantity: $product->stockQuantity,
+            );
+        }
+
+        foreach ($variations as $variation) {
+            $rows[] = $this->row(
+                id: $variation->id,
+                parentId: $product->id,
+                type: 'variation',
+                name: $this->variationName($product->name, $variation->attributeLabels),
+                sku: $variation->sku,
+                price: $variation->price,
+                manageStock: $variation->manageStock,
+                quantity: $variation->stockQuantity,
             );
         }
 
@@ -90,6 +109,20 @@ final class InventoryRows
             static fn (ProductSnapshot $variation): bool => $variation->enabled
                 && $variation->stockStatus === self::IN_STOCK,
         ));
+    }
+
+    /**
+     * @param list<ProductSnapshot> $variations
+     */
+    private function usesParentStock(array $variations): bool
+    {
+        foreach ($variations as $variation) {
+            if ($variation->manageStock === ProductSnapshot::PARENT_MANAGED) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
