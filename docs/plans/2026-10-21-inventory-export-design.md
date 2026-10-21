@@ -57,6 +57,9 @@ Columns: `id ; parent_id ; type ; name ; sku ; price ; manage_stock ; stock_quan
   their raw value, "Any…" attributes are omitted.
 - **SKU**: the product's/variation's own SKU (`edit` context); a variation without a SKU stays blank instead
   of inheriting the parent's.
+- **Formula injection protection**: a name or SKU starting with `=`, `+`, `-`, `@`, tab or carriage return gets a
+  leading `'`, so Excel shows it as text instead of running it as a formula. The `'` is visible in Excel; such
+  values are rare in product catalogs. Documented in the README.
 - **Price**: the current selling price (`get_price()`): the sale price while a sale is active, otherwise the
   regular price; a scheduled sale that has not started does not count. Blank when no price is set (common on
   unpublished items). Parent rows of variable products always have a blank price. Formatted with the shop's
@@ -69,9 +72,10 @@ Columns: `id ; parent_id ; type ; name ; sku ; price ; manage_stock ; stock_quan
 ## Data flow
 
 1. Validate flags; abort on error before opening the file.
-2. Query product IDs in pages of 500, ordered by ID, filtered by status (all product types).
+2. Fetch all matching product IDs once (ordered by ID, filtered by status, all product types), so products
+   created or deleted during the run cannot shift batches; process them in batches of 500.
 3. For each ID: `wc_get_product()` → `ProductReader` → `ProductSnapshot` → `InventoryRows` → `fputcsv` immediately.
-4. After each page, flush the object cache so memory stays flat on catalogs with tens of thousands of products.
+4. After each batch, flush the object cache so memory stays flat on catalogs with tens of thousands of products.
 5. Write the total row, close the file, print the summary.
 
 ## Error handling
@@ -90,5 +94,5 @@ the summary, continue.
 - `InventoryRows` is unit-tested with PHPUnit using plain `ProductSnapshot` values — no mocks:
   simple yes/no stock management, variation own/none/parent stock, parent row placement and single counting,
   disabled and out-of-stock/backorder variations excluded, naming with taxonomy/custom/"Any" attributes,
-  price formatting and blank prices, total row.
+  price formatting and blank prices, formula-injection prefix, total row.
 - `ProductReader` and the CLI command are verified manually with `wp inventory-export` on a staging shop.
