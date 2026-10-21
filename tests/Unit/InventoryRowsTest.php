@@ -274,6 +274,44 @@ final class InventoryRowsTest extends TestCase
         self::assertSame("'-21", $rows[0][4]);
     }
 
+    public function test_variation_name_from_a_formula_like_parent_name_gets_a_quote_prefix(): void
+    {
+        $product = new ProductSnapshot(
+            id: 20,
+            type: 'variable',
+            name: '=T-Shirt',
+            sku: 'TS',
+            price: '15',
+            stockStatus: 'instock',
+            manageStock: ProductSnapshot::UNMANAGED,
+            stockQuantity: null,
+            variations: [self::variation(21)],
+        );
+
+        $rows = self::rows()->forProduct($product);
+
+        self::assertSame("'=T-Shirt - Yellow - XL", $rows[0][3]);
+    }
+
+    public function test_non_latin_name_and_sku_are_left_alone(): void
+    {
+        $product = new ProductSnapshot(
+            id: 10,
+            type: 'simple',
+            name: 'Κούπα',
+            sku: 'ΚΟΥ-1',
+            price: '12.5',
+            stockStatus: 'instock',
+            manageStock: ProductSnapshot::MANAGED,
+            stockQuantity: 5,
+        );
+
+        $rows = self::rows()->forProduct($product);
+
+        self::assertSame('Κούπα', $rows[0][3]);
+        self::assertSame('ΚΟΥ-1', $rows[0][4]);
+    }
+
     private static function rows(): InventoryRows
     {
         return new InventoryRows(',', 2);
