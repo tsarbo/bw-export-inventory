@@ -7,7 +7,7 @@
  * Plugin Name: BW Export Inventory
  * Plugin URI: https://github.com/tsarbo/bw-export-inventory
  * Description: WP-CLI command that exports in-stock WooCommerce products and variations to CSV with a stock total.
- * Version: 0.1.0
+ * Version: 1.0.0
  * Author: BeyondWeb
  * Author URI: https://beyondweb.gr
  * License: GPL v2 or later
