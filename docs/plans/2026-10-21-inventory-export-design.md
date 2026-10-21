@@ -19,7 +19,8 @@ bw-export-inventory/
 
 - Header follows the newer BeyondWeb plugins: `Plugin Name: BW Export Inventory`, `Author: BeyondWeb`,
   `Author URI: https://beyondweb.gr`, `Version: 0.1.0`, `Requires PHP: 8.1`, `Requires Plugins: woocommerce`,
-  `Text Domain: bw-export-inventory`, HPOS compatibility declaration.
+  `Text Domain: bw-export-inventory`, `License: GPL v2 or later`,
+  `License URI: https://www.gnu.org/licenses/gpl-2.0.html`, HPOS compatibility declaration.
 - Namespace `BeyondWeb\ExportInventory`. Runtime has no dependencies: files are loaded with `require_once`
   (like `beyondweb-istante-pylon-sync`). Composer is used only for PHPUnit in development.
 - No `beyondweb-updater` for now.
