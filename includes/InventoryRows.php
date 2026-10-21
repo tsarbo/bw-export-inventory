@@ -13,6 +13,8 @@ final class InventoryRows
 
     private const IN_STOCK = 'instock';
 
+    private int $stockTotal = 0;
+
     /**
      * @param string $decimalSeparator Shop's price decimal separator, so Excel in the shop's locale reads prices as numbers.
      * @param int    $decimals         Shop's number of price decimals.
@@ -33,6 +35,19 @@ final class InventoryRows
             'variable' => $this->variableRows($product),
             default => [],
         };
+    }
+
+    public function stockTotal(): int
+    {
+        return $this->stockTotal;
+    }
+
+    /**
+     * @return list<int|string>
+     */
+    public function totalRow(): array
+    {
+        return ['', '', '', 'TOTAL (stock-managed rows)', '', '', '', $this->stockTotal];
     }
 
     /**
@@ -151,6 +166,7 @@ final class InventoryRows
         ?int $quantity,
     ): array {
         $exportedQuantity = $manageStock === ProductSnapshot::MANAGED ? $quantity : null;
+        $this->stockTotal += $exportedQuantity ?? 0;
 
         return [$id, $parentId, $type, $name, $sku, $this->formatPrice($price), $manageStock, $exportedQuantity ?? ''];
     }

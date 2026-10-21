@@ -161,6 +161,34 @@ final class InventoryRowsTest extends TestCase
         self::assertSame([[22, 20, 'variation', 'T-Shirt - Yellow - XL', 'TS-22', '9,90', 'yes', 4]], $rows);
     }
 
+    public function test_total_row_is_zero_before_any_product(): void
+    {
+        $rows = self::rows();
+
+        self::assertSame(['', '', '', 'TOTAL (stock-managed rows)', '', '', '', 0], $rows->totalRow());
+        self::assertSame(0, $rows->stockTotal());
+    }
+
+    public function test_total_sums_exported_quantities_and_counts_shared_stock_once(): void
+    {
+        $rows = self::rows();
+        $rows->forProduct(self::simple(quantity: 5));
+        $rows->forProduct(self::simple(manageStock: ProductSnapshot::UNMANAGED, quantity: 9));
+        $rows->forProduct(self::simple(stockStatus: 'outofstock', quantity: 100));
+        $rows->forProduct(self::variable(
+            [
+                self::variation(21, manageStock: ProductSnapshot::PARENT_MANAGED, quantity: 50),
+                self::variation(22, manageStock: ProductSnapshot::PARENT_MANAGED, quantity: 50),
+                self::variation(23, quantity: 4),
+            ],
+            manageStock: ProductSnapshot::MANAGED,
+            quantity: 50,
+        ));
+
+        self::assertSame(59, $rows->stockTotal());
+        self::assertSame(['', '', '', 'TOTAL (stock-managed rows)', '', '', '', 59], $rows->totalRow());
+    }
+
     private static function rows(): InventoryRows
     {
         return new InventoryRows(',', 2);
