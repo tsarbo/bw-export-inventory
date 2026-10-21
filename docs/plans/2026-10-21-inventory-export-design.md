@@ -18,7 +18,8 @@ bw-export-inventory/
 ```
 
 - Header follows the newer BeyondWeb plugins: `Plugin Name: BW Export Inventory`, `Author: BeyondWeb`,
-  `Author URI: https://beyondweb.gr`, `Version: 0.1.0`, `Requires PHP: 8.1`, `Requires Plugins: woocommerce`,
+  `Author URI: https://beyondweb.gr`, `Version: 0.1.0`, `Requires at least: 6.5` (needed by `Requires Plugins`), `Requires PHP: 8.1`,
+  `Requires Plugins: woocommerce`,
   `Text Domain: bw-export-inventory`, `License: GPL v2 or later`,
   `License URI: https://www.gnu.org/licenses/gpl-2.0.html`, HPOS compatibility declaration.
 - Namespace `BeyondWeb\ExportInventory`. Runtime has no dependencies: files are loaded with `require_once`
@@ -85,8 +86,12 @@ Columns: `id ; parent_id ; type ; name ; sku ; price ; manage_stock ; stock_quan
 Abort with `WP_CLI::error` (nothing written) when:
 - WooCommerce is not active.
 - `--status` contains an unknown status (message lists valid ones from `get_post_stati()`).
-- `--delimiter` is not exactly one character.
+- `--status` is empty (e.g. `--status=,`), or combines `any` with other statuses.
+- `--delimiter` is not exactly one single-byte character, or is a double quote or a line break.
 - The output file cannot be opened for writing.
+
+Abort with `WP_CLI::error` when writing to the file fails during the run (e.g. disk full), including when closing
+it: the message says the file is incomplete, and no success is reported.
 
 During the run, if `wc_get_product()` returns nothing for an ID: `WP_CLI::warning` with the ID, count it in
 the summary, continue.

@@ -4,7 +4,7 @@ WP-CLI command that exports in-stock WooCommerce products and variations to a CS
 
 ## Requirements
 
-PHP 8.1+, WordPress 6.4+, WooCommerce 8.0+, WP-CLI.
+PHP 8.1+, WordPress 6.5+, WooCommerce 8.0+, WP-CLI.
 
 ## Usage
 
@@ -19,6 +19,9 @@ wp inventory-export [--status=<list>] [--file=<path>] [--delimiter=<char>]
 | `--delimiter` | `;` | Column delimiter |
 
 The file is UTF-8 with a BOM so Excel shows non-Latin product names correctly.
+
+A relative `--file` path is resolved against the directory the command runs in (on the remote server when using
+`@alias` or `--ssh`).
 
 ## Output
 
@@ -38,6 +41,7 @@ Columns: `id`, `parent_id`, `type`, `name`, `sku`, `price`, `manage_stock`, `sto
   It is blank when no price is set, and always blank on parent rows. It uses the shop's decimal separator and
   number of decimals (WooCommerce → Settings → General), with no thousands separator.
 - Other product types (grouped, external, …) are skipped and counted in the command's summary.
+  Products without a product type registered in WooCommerce are never fetched, so they are not counted either.
 - Names, prices and stock quantities are the values stored in WooCommerce, not as changed by translation, pricing
   or currency plugins. Decimal stock quantities (from plugins that allow fractional stock) are not supported.
 - The last row is `TOTAL (stock-managed rows)` with the sum of the `stock_quantity` column.
