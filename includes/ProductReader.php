@@ -18,9 +18,9 @@ final class ProductReader
         return new ProductSnapshot(
             id: $product->get_id(),
             type: $product->get_type(),
-            name: $product->get_name(),
+            name: $product->get_name('edit'),
             sku: $product->get_sku('edit'),
-            price: (string) $product->get_price(),
+            price: (string) $product->get_price('edit'),
             stockStatus: $product->get_stock_status(),
             manageStock: $product->get_manage_stock() ? ProductSnapshot::MANAGED : ProductSnapshot::UNMANAGED,
             stockQuantity: $product->get_stock_quantity('edit'),
@@ -51,9 +51,9 @@ final class ProductReader
         return new ProductSnapshot(
             id: $variation->get_id(),
             type: 'variation',
-            name: $variation->get_name(),
+            name: $variation->get_name('edit'),
             sku: $variation->get_sku('edit'),
-            price: (string) $variation->get_price(),
+            price: (string) $variation->get_price('edit'),
             stockStatus: $variation->get_stock_status(),
             manageStock: $this->variationManageStock($variation),
             stockQuantity: $variation->get_stock_quantity('edit'),
