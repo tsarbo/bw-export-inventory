@@ -36,7 +36,7 @@ wp inventory-export [--status=<list>] [--file=<path>] [--delimiter=<char>]
 |---|---|---|
 | `--status` | `publish` | Comma list (`publish,draft,private`) or `any` = every status except `trash` and `auto-draft` |
 | `--file` | `./inventory-YYYY-MM-DD-HHMMSS.csv` | Existing file is overwritten |
-| `--delimiter` | `;` | Exactly one character |
+| `--delimiter` | `;` | One single-byte character, not `"` or a line break |
 
 Output file is UTF-8 with BOM. Terminal shows a progress bar, then a summary: rows written, stock total,
 skipped product types with counts (e.g. `grouped: 12, external: 3`), unreadable product IDs, and the file path.

@@ -194,7 +194,7 @@ final class ExportInventoryCommand
         }
     }
 
-    private function abortIncomplete(string $file): void
+    private function abortIncomplete(string $file): never
     {
         WP_CLI::error("Writing to {$file} failed (disk full?). The file is incomplete.");
     }

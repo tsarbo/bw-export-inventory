@@ -4,9 +4,11 @@
 
 **Goal:** A WordPress plugin exposing `wp inventory-export`, which writes in-stock WooCommerce simple products and variations (with their current price) to a CSV file with a stock total on the last line.
 
-**Architecture:** `ProductReader` turns a `WC_Product` into a plain `ProductSnapshot` value object. `InventoryRows` (pure PHP, no WordPress calls) holds every export rule and turns snapshots into CSV rows while keeping the stock total. `ExportInventoryCommand` validates flags, pages through product IDs, streams rows to disk and prints a summary. Design: `docs/plans/2026-10-21-inventory-export-design.md`.
+**Architecture:** `ProductReader` turns a `WC_Product` into a plain `ProductSnapshot` value object. `InventoryRows` (pure PHP, no WordPress calls) holds every export rule and turns snapshots into CSV rows while keeping the stock total. `ExportInventoryCommand` validates flags, fetches all matching product IDs, processes them in batches, streams rows to disk and prints a summary. Design: `docs/plans/2026-10-21-inventory-export-design.md`.
 
-**Tech Stack:** PHP 8.1+, WordPress 6.4+, WooCommerce 8.0+, WP-CLI, PHPUnit 10.5 (dev only, via Composer).
+**Tech Stack:** PHP 8.1+, WordPress 6.5+, WooCommerce 8.0+, WP-CLI, PHPUnit 10.5 (dev only, via Composer).
+
+**Source of truth:** the design doc and the code. Code blocks below are each task's starting point; review follow-ups refined some of them afterwards.
 
 ---
 
@@ -1169,7 +1171,7 @@ final class ExportInventoryCommand
 
         $delimiter = $assoc_args['delimiter'] ?? ';';
         if (strlen($delimiter) !== 1) {
-            WP_CLI::error('--delimiter must be exactly one character.');
+            WP_CLI::error('--delimiter must be exactly one single-byte character.');
         }
 
         $file = $assoc_args['file'] ?? 'inventory-' . wp_date('Y-m-d-His') . '.csv';
@@ -1314,7 +1316,7 @@ final class ExportInventoryCommand
  * License: GPL v2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: bw-export-inventory
- * Requires at least: 6.4
+ * Requires at least: 6.5
  * Requires PHP: 8.1
  * Requires Plugins: woocommerce
  * WC requires at least: 8.0

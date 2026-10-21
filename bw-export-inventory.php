@@ -17,6 +17,7 @@
  * Requires PHP: 8.1
  * Requires Plugins: woocommerce
  * WC requires at least: 8.0
+ * WC tested up to: 10.8
  */
 
 declare(strict_types=1);

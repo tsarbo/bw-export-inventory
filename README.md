@@ -15,8 +15,8 @@ wp inventory-export [--status=<list>] [--file=<path>] [--delimiter=<char>]
 | Option | Default | Description |
 |---|---|---|
 | `--status` | `publish` | Comma-separated product statuses (`publish,draft,private`), or `any` for every status except trash and auto-draft |
-| `--file` | `inventory-YYYY-MM-DD-HHMMSS.csv` | Output path |
-| `--delimiter` | `;` | Column delimiter |
+| `--file` | `inventory-YYYY-MM-DD-HHMMSS.csv` | Output path; an existing file is overwritten |
+| `--delimiter` | `;` | Column delimiter: one single-byte character, not `"` or a line break |
 
 The file is UTF-8 with a BOM so Excel shows non-Latin product names correctly.
 
