@@ -71,8 +71,10 @@ final class ExportInventoryCommand
             WP_CLI::error("Cannot write to: {$file}");
         }
 
-        fwrite($handle, self::UTF8_BOM);
-        $this->writeRow($handle, InventoryRows::HEADER, $delimiter);
+        if (fwrite($handle, self::UTF8_BOM) === false) {
+            $this->abortIncomplete($file);
+        }
+        $this->writeRow($handle, InventoryRows::HEADER, $delimiter, $file);
 
         $rows = new InventoryRows(wc_get_price_decimal_separator(), wc_get_price_decimals());
         $reader = new ProductReader();
@@ -101,7 +103,7 @@ final class ExportInventoryCommand
                 }
 
                 foreach ($rows->forProduct($reader->read($product)) as $row) {
-                    $this->writeRow($handle, $row, $delimiter);
+                    $this->writeRow($handle, $row, $delimiter, $file);
                     $written++;
                 }
             }
@@ -112,8 +114,10 @@ final class ExportInventoryCommand
 
         $progress->finish();
 
-        $this->writeRow($handle, $rows->totalRow(), $delimiter);
-        fclose($handle);
+        $this->writeRow($handle, $rows->totalRow(), $delimiter, $file);
+        if (!fclose($handle)) {
+            $this->abortIncomplete($file);
+        }
 
         WP_CLI::log("Rows written: {$written}");
         WP_CLI::log('Stock total: ' . $rows->stockTotal());
@@ -167,12 +171,21 @@ final class ExportInventoryCommand
     }
 
     /**
+     * Aborts the export when the row cannot be written, so a partial file never reports success.
+     *
      * @param resource         $handle
      * @param list<int|string> $row
      */
-    private function writeRow($handle, array $row, string $delimiter): void
+    private function writeRow($handle, array $row, string $delimiter, string $file): void
     {
-        fputcsv($handle, $row, $delimiter, '"', '');
+        if (fputcsv($handle, $row, $delimiter, '"', '') === false) {
+            $this->abortIncomplete($file);
+        }
+    }
+
+    private function abortIncomplete(string $file): void
+    {
+        WP_CLI::error("Writing to {$file} failed (disk full?). The file is incomplete.");
     }
 
     /**
