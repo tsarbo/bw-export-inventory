@@ -67,6 +67,20 @@ final class InventoryRowsTest extends TestCase
         self::assertSame('', $rows[0][5]);
     }
 
+    public function test_zero_price_is_exported_as_zero_not_blank(): void
+    {
+        $rows = self::rows()->forProduct(self::simple(price: '0'));
+
+        self::assertSame('0,00', $rows[0][5]);
+    }
+
+    public function test_price_is_rounded_to_the_shop_decimals(): void
+    {
+        $rows = self::rows()->forProduct(self::simple(price: '12.345'));
+
+        self::assertSame('12,35', $rows[0][5]);
+    }
+
     private static function rows(): InventoryRows
     {
         return new InventoryRows(',', 2);
