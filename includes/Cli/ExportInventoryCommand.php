@@ -62,7 +62,10 @@ final class ExportInventoryCommand
 
         $delimiter = $assoc_args['delimiter'] ?? ';';
         if (strlen($delimiter) !== 1) {
-            WP_CLI::error('--delimiter must be exactly one character.');
+            WP_CLI::error('--delimiter must be exactly one single-byte character.');
+        }
+        if (in_array($delimiter, ['"', "\n", "\r"], true)) {
+            WP_CLI::error('--delimiter cannot be a double quote or a line break.');
         }
 
         $file = $assoc_args['file'] ?? 'inventory-' . wp_date('Y-m-d-His') . '.csv';
