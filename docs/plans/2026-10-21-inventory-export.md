@@ -1001,12 +1001,12 @@ final class ProductReader
         return new ProductSnapshot(
             id: $product->get_id(),
             type: $product->get_type(),
-            name: $product->get_name(),
+            name: $product->get_name('edit'),
             sku: $product->get_sku('edit'),
-            price: (string) $product->get_price(),
+            price: (string) $product->get_price('edit'),
             stockStatus: $product->get_stock_status(),
             manageStock: $product->get_manage_stock() ? ProductSnapshot::MANAGED : ProductSnapshot::UNMANAGED,
-            stockQuantity: $product->get_stock_quantity(),
+            stockQuantity: $product->get_stock_quantity('edit'),
             variations: $product->is_type('variable') ? $this->readVariations($product) : [],
         );
     }
@@ -1034,9 +1034,9 @@ final class ProductReader
         return new ProductSnapshot(
             id: $variation->get_id(),
             type: 'variation',
-            name: $variation->get_name(),
+            name: $variation->get_name('edit'),
             sku: $variation->get_sku('edit'),
-            price: (string) $variation->get_price(),
+            price: (string) $variation->get_price('edit'),
             stockStatus: $variation->get_stock_status(),
             manageStock: $this->variationManageStock($variation),
             stockQuantity: $variation->get_stock_quantity('edit'),
@@ -1406,6 +1406,8 @@ Columns: `id`, `parent_id`, `type`, `name`, `sku`, `price`, `manage_stock`, `sto
   It is blank when no price is set, and always blank on parent rows. It uses the shop's decimal separator and
   number of decimals (WooCommerce → Settings → General), with no thousands separator.
 - Other product types (grouped, external, …) are skipped and counted in the command's summary.
+- Names, prices and stock quantities are the values stored in WooCommerce, not as changed by translation, pricing
+  or currency plugins. Decimal stock quantities (from plugins that allow fractional stock) are not supported.
 - The last row is `TOTAL (stock-managed rows)` with the sum of the `stock_quantity` column.
 
 ## Development

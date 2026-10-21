@@ -55,12 +55,14 @@ Columns: `id ; parent_id ; type ; name ; sku ; price ; manage_stock ; stock_quan
 - Other product types (grouped, external, plugin types) are skipped and counted for the summary.
 - **Variation name**: `Parent name - Yellow - XL`. Taxonomy attributes use the term name, custom attributes
   their raw value, "Any…" attributes are omitted.
+- **Name**: the stored product name (`get_name('edit')`), unaffected by translation plugins.
+- **Stock quantity**: the stored value (`get_stock_quantity('edit')`). Decimal stock (plugins that make stock fractional) is not supported.
 - **SKU**: the product's/variation's own SKU (`edit` context); a variation without a SKU stays blank instead
   of inheriting the parent's.
 - **Formula injection protection**: a name or SKU starting with `=`, `+`, `-`, `@`, tab or carriage return gets a
   leading `'`, so Excel shows it as text instead of running it as a formula. The `'` is visible in Excel; such
   values are rare in product catalogs. Documented in the README.
-- **Price**: the current selling price (`get_price()`): the sale price while a sale is active, otherwise the
+- **Price**: the stored current selling price (`get_price('edit')`, i.e. `_price`, unaffected by pricing or currency plugins): the sale price while a sale is active, otherwise the
   regular price; a scheduled sale that has not started does not count. Blank when no price is set (common on
   unpublished items). Parent rows of variable products always have a blank price. Formatted with the shop's
   decimal separator and number of decimals (WooCommerce → Settings → General), no thousands separator,
