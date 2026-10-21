@@ -13,6 +13,8 @@ final class InventoryRows
 
     private const IN_STOCK = 'instock';
 
+    private const FORMULA_PREFIXES = ['=', '+', '-', '@', "\t", "\r"];
+
     private int $stockTotal = 0;
 
     /**
@@ -171,7 +173,16 @@ final class InventoryRows
         $exportedQuantity = $manageStock === ProductSnapshot::MANAGED ? $quantity : null;
         $this->stockTotal += $exportedQuantity ?? 0;
 
-        return [$id, $parentId, $type, $name, $sku, $this->formatPrice($price), $manageStock, $exportedQuantity ?? ''];
+        return [
+            $id,
+            $parentId,
+            $type,
+            $this->asPlainText($name),
+            $this->asPlainText($sku),
+            $this->formatPrice($price),
+            $manageStock,
+            $exportedQuantity ?? '',
+        ];
     }
 
     private function formatPrice(string $price): string
@@ -181,5 +192,17 @@ final class InventoryRows
         }
 
         return number_format((float) $price, $this->decimals, $this->decimalSeparator, '');
+    }
+
+    /**
+     * Excel runs a cell starting with a formula character as a formula; a leading ' makes it plain text.
+     */
+    private function asPlainText(string $value): string
+    {
+        if ($value !== '' && in_array($value[0], self::FORMULA_PREFIXES, true)) {
+            return "'" . $value;
+        }
+
+        return $value;
     }
 }

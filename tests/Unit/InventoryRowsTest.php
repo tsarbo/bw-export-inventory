@@ -9,6 +9,7 @@ namespace BeyondWeb\ExportInventory\Tests\Unit;
 
 use BeyondWeb\ExportInventory\InventoryRows;
 use BeyondWeb\ExportInventory\ProductSnapshot;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 final class InventoryRowsTest extends TestCase
@@ -198,6 +199,79 @@ final class InventoryRowsTest extends TestCase
             $rows->forProduct(self::simple(quantity: null)),
         );
         self::assertSame(0, $rows->stockTotal());
+    }
+
+    #[DataProvider('formulaPrefixes')]
+    public function test_name_and_sku_starting_with_a_formula_character_get_a_quote_prefix(string $prefix): void
+    {
+        $product = new ProductSnapshot(
+            id: 10,
+            type: 'simple',
+            name: "{$prefix}Mug",
+            sku: "{$prefix}MUG-1",
+            price: '12.5',
+            stockStatus: 'instock',
+            manageStock: ProductSnapshot::MANAGED,
+            stockQuantity: 5,
+        );
+
+        $rows = self::rows()->forProduct($product);
+
+        self::assertSame("'{$prefix}Mug", $rows[0][3]);
+        self::assertSame("'{$prefix}MUG-1", $rows[0][4]);
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function formulaPrefixes(): array
+    {
+        return [
+            'equals' => ['='],
+            'plus' => ['+'],
+            'minus' => ['-'],
+            'at' => ['@'],
+            'tab' => ["\t"],
+            'carriage return' => ["\r"],
+        ];
+    }
+
+    public function test_formula_characters_inside_a_value_are_left_alone(): void
+    {
+        $product = new ProductSnapshot(
+            id: 10,
+            type: 'simple',
+            name: 'A=B + C',
+            sku: 'X-1@2',
+            price: '12.5',
+            stockStatus: 'instock',
+            manageStock: ProductSnapshot::MANAGED,
+            stockQuantity: 5,
+        );
+
+        $rows = self::rows()->forProduct($product);
+
+        self::assertSame('A=B + C', $rows[0][3]);
+        self::assertSame('X-1@2', $rows[0][4]);
+    }
+
+    public function test_variation_sku_starting_with_a_formula_character_gets_a_quote_prefix(): void
+    {
+        $variation = new ProductSnapshot(
+            id: 21,
+            type: 'variation',
+            name: 'T-Shirt - variation 21',
+            sku: '-21',
+            price: '9.9',
+            stockStatus: 'instock',
+            manageStock: ProductSnapshot::MANAGED,
+            stockQuantity: 3,
+            attributeLabels: ['Yellow'],
+        );
+
+        $rows = self::rows()->forProduct(self::variable([$variation]));
+
+        self::assertSame("'-21", $rows[0][4]);
     }
 
     private static function rows(): InventoryRows
